@@ -12,3 +12,6 @@ new Generate(path, Action<Generate.Info, Serializer>).StartWrite();
 开始创建脚本
 如果需要把脚本的内容格式化
 你可以调用 Generate.FormatScript(string str);这样就会重新布局脚本内的内容了
+
+#示例
+![index](https://github.com/pk27602017/ScriptGenerate/raw/master/Image/2.png)

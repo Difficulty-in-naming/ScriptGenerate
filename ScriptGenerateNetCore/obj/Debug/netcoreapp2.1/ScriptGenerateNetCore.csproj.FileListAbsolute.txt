@@ -1,9 +1,0 @@
-D:\Project\Company\ScriptGenerate\ScriptGenerateNetCore\bin\Debug\netcoreapp2.1\ScriptGenerateNetCore.deps.json
-D:\Project\Company\ScriptGenerate\ScriptGenerateNetCore\bin\Debug\netcoreapp2.1\ScriptGenerateNetCore.dll
-D:\Project\Company\ScriptGenerate\ScriptGenerateNetCore\bin\Debug\netcoreapp2.1\ScriptGenerateNetCore.pdb
-D:\Project\Company\ScriptGenerate\ScriptGenerateNetCore\obj\Debug\netcoreapp2.1\ScriptGenerateNetCore.csprojAssemblyReference.cache
-D:\Project\Company\ScriptGenerate\ScriptGenerateNetCore\obj\Debug\netcoreapp2.1\ScriptGenerateNetCore.csproj.CoreCompileInputs.cache
-D:\Project\Company\ScriptGenerate\ScriptGenerateNetCore\obj\Debug\netcoreapp2.1\ScriptGenerateNetCore.AssemblyInfoInputs.cache
-D:\Project\Company\ScriptGenerate\ScriptGenerateNetCore\obj\Debug\netcoreapp2.1\ScriptGenerateNetCore.AssemblyInfo.cs
-D:\Project\Company\ScriptGenerate\ScriptGenerateNetCore\obj\Debug\netcoreapp2.1\ScriptGenerateNetCore.dll
-D:\Project\Company\ScriptGenerate\ScriptGenerateNetCore\obj\Debug\netcoreapp2.1\ScriptGenerateNetCore.pdb

@@ -1,6 +1,0 @@
-D:\Project\Company\ScriptGenerate\ScriptGenerate\bin\Debug\ScriptGenerate.dll
-D:\Project\Company\ScriptGenerate\ScriptGenerate\bin\Debug\ScriptGenerate.pdb
-D:\Project\Company\ScriptGenerate\ScriptGenerate\obj\Debug\ScriptGenerate.csproj.CoreCompileInputs.cache
-D:\Project\Company\ScriptGenerate\ScriptGenerate\obj\Debug\ScriptGenerate.dll
-D:\Project\Company\ScriptGenerate\ScriptGenerate\obj\Debug\ScriptGenerate.pdb
-D:\Project\Company\ScriptGenerate\ScriptGenerate\obj\Debug\ScriptGenerate.csprojAssemblyReference.cache

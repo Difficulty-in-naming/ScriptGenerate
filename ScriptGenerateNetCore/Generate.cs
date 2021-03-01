@@ -2,291 +2,195 @@
 using System.Collections.Generic;
 using System.IO;
 using System.Text;
-using System.Text.RegularExpressions;
 
 namespace DreamLib.Editor.Unity.Extensition
 {
     public class Generate
     {
-        internal Stack<PlaceHolder> CurrentPlace = new Stack<PlaceHolder>();
-        internal Stack<string> Group = new Stack<string>();
-        private string[] mTemplateFragment;
-        private Action<Info, Serializer> mWriterCallBack;
-        StringBuilder sb = new StringBuilder();
-        public class Info
+        public KeyPart Tree;
+        public Generate(string templatePath)
         {
-            public string PlaceHolder;
+            var str = File.ReadAllText(templatePath);
+            Tree = new KeyPart(new TextSpan(0, str.Length, str), str);
         }
 
-        private Serializer mSerializer;
-
-        public Serializer Serializer => mSerializer ?? (mSerializer = new Serializer(this));
-
-        internal class PlaceHolder
+        public override string ToString()
         {
-            public string Name;//占位符名称
-            public string Content;//原内容
-            public string PreContent;//等待推入StringBuilder的内容
-            public string AllContent;//用于给上级进行整体替换的文本
-            public StringBuilder StringBuilder = new StringBuilder();//最后压入SB中,提交给上一层,如果没有上一层则写入到文件当中
-            private List<PlaceHolder> mMatches;
-            public List<PlaceHolder> Matches
+            return Tree.ToString();
+        }
+    }
+
+    public class TextSpan
+    {
+        public int Start { get; }
+        public int End { get; }
+        public string Text { get; }
+        public TextSpan(int start, int end, string text)
+        {
+            Start = start;
+            End = end;
+            Text = text;
+        }
+
+        public override string ToString()
+        {
+            return Text;
+        }
+    }
+    
+    public class KeyPart
+    {
+        private List<Tuple<TextSpan, KeyPart>> Child = new List<Tuple<TextSpan, KeyPart>>();
+        private List<Tuple<TextSpan, KeyPart>> ReplaceList = new List<Tuple<TextSpan, KeyPart>>();
+        private string ReplaceString;
+        public TextSpan Span { get; private set; }
+        public KeyPart(TextSpan span,string temp)
+        {
+            Span = span;
+            Analyzis(temp);
+        }
+        
+        public KeyPart GetChild(string child)
+        {
+            foreach (var node in Child)
             {
-                get { return mMatches ?? (mMatches = AnalysisPlaceHolder(Content)); }
+                var key = node.Item1.Text.TrimEnd(']').Substring(2);
+                if (key == child)
+                    return node.Item2;
             }
-            public PlaceHolder FilterMatches(string name)
+            return null;
+        }
+
+        public void Add(string insertPos,KeyPart part)
+        {
+            TextSpan span = null;
+            foreach (var node in Child)
             {
-                var place = Matches.Find(t1 => t1.Name == name);
-                if (place == null)
-                    return null;
-                return new PlaceHolder {AllContent = place.AllContent, Content = place.Content, Name = place.Name};
+                var key = node.Item1.Text.TrimEnd(']').Substring(2);
+                if (key == insertPos)
+                    span = node.Item1;
             }
+            if (span == null)
+                throw new Exception("没有找到对应的Key");
+            ReplaceList.Add(new Tuple<TextSpan, KeyPart>(span, part));
         }
 
-        public Generate(string path, Action<Info,Serializer> callback)
+        public void Replace(string value)
         {
-            mTemplateFragment = global::System.IO.File.ReadAllLines(path);
-            mWriterCallBack = callback;
+            ReplaceString = value;
         }
-
-        public string StartWrite()
+        
+        private void Analyzis(string str)
         {
-            for (var index = 0; index < mTemplateFragment.Length; )
+            if (string.IsNullOrEmpty(str))
+                return;
+            bool startGroup = false;
+            int pass = 0;
+            int startBrackets = 0;
+            int startGroupStartIndex = 0;
+            int startGroupEndIndex = 0;
+            StringBuilder key = new StringBuilder();
+            bool needCheckBrackets = false;
+            char[] ccc = str.ToCharArray();
+            for (var index = 0; index < str.Length; index++)
             {
-                CurrentPlace.Clear();
-                var match = Regex.Match(mTemplateFragment[index], @"\[@(.+?)]");
-                if (!match.Success)
-                    sb.AppendLine(mTemplateFragment[index++]);
-                else
+                var node = str[index];
+                if (node == '[' && pass == 0)//检查是否开始填充
                 {
-                    index = AnalysisPlaceHolder(index);
-                    mWriterCallBack(Replace(CurrentPlace.Peek()), Serializer);
-                    var place = CurrentPlace.Pop();
-                    sb.AppendLine(place.StringBuilder.ToString());
-                }
-            }
-            return sb.ToString();
-        }
-
-        private Info Replace(PlaceHolder holder)
-        {
-            return new Info{PlaceHolder =  holder.Name};
-        }
-
-        private static List<PlaceHolder> AnalysisPlaceHolder(string s)
-        {
-            var matches = Regex.Matches(s, @"\[@(.+?)]");
-            int stringLength = s.Length;
-            bool startCounting = false;
-            int counting = 0;//计算当counting变为0时表示占位符标记已经结束
-            int length = matches.Count;
-            var place = new List<PlaceHolder>();
-            for (int i = 0; i < length; i++)
-            {
-                startCounting = false;
-                StringBuilder placeHolder = new StringBuilder();
-                StringBuilder totalString = new StringBuilder();
-                var match = matches[i];
-                for (int j = match.Index + match.Length; j < stringLength; j++)
-                {
-                    totalString.Append(s[j]);
-                    if (s[j] == '{')//直到找到第一个花括号开始才是真正的替换目标
+                    needCheckBrackets = str[index + 1] == '%';
+                    if (str[index + 1] == '@' || str[index + 1] == '%')
                     {
-                        counting++;
-                        startCounting = true;
+                        startGroupStartIndex = index;
+                        index++;
+                        startGroup = true;
                     }
-                    if (!startCounting)
-                        continue;
-                    if (s[j] == '}')
+                    continue;
+                }
+                if (node == ']' && startGroup)//填充结束
+                {
+                    startGroup = false;
+                    startGroupEndIndex = index;
+                    if (needCheckBrackets == false)
                     {
-                        counting--;
-                        if (counting == 0)
+                        var keyText = str.Substring(startGroupStartIndex, startGroupEndIndex - startGroupStartIndex + 1);
+                        var span = new TextSpan(startGroupStartIndex, startGroupEndIndex, keyText);
+                        if(!Child.Exists(t1=>t1.Item1.Text == span.Text))
+                            Child.Add(new Tuple<TextSpan, KeyPart>(span, new KeyPart(span,"")));
+                        key.Clear();
+                    }
+                    continue;
+                }
+                if (startGroup)//如果已经开始填充了.我们把沿途的字符串存为key
+                {
+                    key.Append(node);
+                    continue;
+                }
+                if (key.Length > 0 && needCheckBrackets) //填充已经结束了,但是我们还需要判断填充的对象是不是Group
+                {
+                    if (node != '\n' && node != '\r' && node != '\t' && !char.IsSeparator(node))
+                    {
+                        if (node == '{')
                         {
-                            //最后去掉第一个花括号和最后一个花括号(这里的花括号是用作标记替代符的范围现在不需要了)
-                            var str = placeHolder.ToString();
-                            str = str.Substring(str.IndexOf('{') + 1);
-                            str = Regex.Replace(str, "^(\r\n)*", "");
-                            str = Regex.Replace(str, "(\r\n*.)$", "");
-                            place.Add(new PlaceHolder { Name = match.Value.Remove(0, 2).TrimEnd(']'), Content = str,AllContent = match.Value + totalString});
-                            break;
+                            if (pass == 0) startBrackets = index + 1;
+                            pass += 1;
+                        }
+                        else if (node == '}' && pass >= 1)
+                        {
+                            pass -= 1;
+                            if (pass == 0)
+                            {
+                                var valueText = str.Substring(startBrackets, index - startBrackets);
+                                var keyText = str.Substring(startGroupStartIndex, startGroupEndIndex - startGroupStartIndex + 1);
+                                if(!Child.Exists(t1=>t1.Item1.Text == keyText))
+                                    Child.Add(new Tuple<TextSpan, KeyPart>(new TextSpan(startGroupStartIndex, startGroupEndIndex, keyText),
+                                        new KeyPart(new TextSpan(startBrackets, index, valueText), valueText)));
+                                key.Clear();
+                            }
                         }
                     }
-                    placeHolder.Append(s[j]);
                 }
             }
-            return place;
         }
 
-        /// <summary>
-        /// 解析占位符
-        /// </summary>
-        private int AnalysisPlaceHolder(int index)
+        public KeyPart Clone()
         {
-            int recoder = index;
-            int length = mTemplateFragment.Length;
-            StringBuilder sb = new StringBuilder();
-            bool startCounting = false;
-            int counting = 0;//计算当counting变为0时表示占位符标记已经结束
-            for (int i = recoder; i < length; i++)
+            if (Child.Count > 0)
+                return new KeyPart(Span, Span.Text);
+            else
+                return new KeyPart(Span, "");
+        }
+
+        public override string ToString()
+        {
+            //排序文本顺序
+            StringBuilder builder = new StringBuilder();
+            int position = 0;
+            Dictionary<string, string> flag = new Dictionary<string, string>();
+            foreach (var node in Child)
             {
-                string temp = mTemplateFragment[i];
-                sb.AppendLine(temp);
-                counting += Regex.Matches(temp, @"{", RegexOptions.IgnorePatternWhitespace).Count;
-                if (counting > 0)
-                    startCounting = true;
-                if (!startCounting)
-                    continue;
-                counting -= Regex.Matches(temp, @"}", RegexOptions.IgnorePatternWhitespace).Count;
-                if (counting == 0)
+                var debugStr = builder.ToString();
+                var str = new StringBuilder(Span.Text.Substring(position, node.Item1.Start - position));
+                builder.Append(str);
+                if (!string.IsNullOrEmpty(node.Item2.ReplaceString))
                 {
-                    recoder = i;
-                    break;
+                    builder.Append(node.Item2.Span.Text);
+                    flag.Add(node.Item2.Span.Text,node.Item2.ReplaceString);
                 }
-            }
-            var match = Regex.Match(sb.ToString(), @"\[@(.+?)]");
-            int stringLength = sb.Length;
-            startCounting = false;
-            StringBuilder placeHolder = new StringBuilder();
-            for (int j = 0; j < stringLength; j++)
-            {
-                if (sb[j] == '{')//直到找到第一个花括号开始才是真正的替换目标
+                else
                 {
-                    counting++;
-                    startCounting = true;
-                }
-                if (!startCounting)
-                    continue;
-                if (sb[j] == '}')
-                {
-                    counting--;
-                    if (counting == 0)
+                    var list = ReplaceList.FindAll(t1 => t1.Item1 == node.Item1);
+                    foreach (var target in list)
                     {
-                        //最后去掉第一个花括号和最后一个花括号(这里的花括号是用作标记替代符的范围现在不需要了)
-                        var str = placeHolder.ToString();
-                        str = str.Substring(str.IndexOf('{') + 1);
-                        str = Regex.Replace(str, "^(\r\n)*", "");
-                        str = Regex.Replace(str, "(\r\n*.)$", "");
-                        CurrentPlace.Push(new PlaceHolder{Name = match.Value.Remove(0, 2).TrimEnd(']'), Content = str});
-                        break;
+                        builder.AppendLine(target.Item2.ToString());
                     }
                 }
-                placeHolder.Append(sb[j]);
+                position = node.Item2.Span.End + 1;
             }
-            return recoder + 1;
-        }
 
-        public static string FormatScript(string str)
-        {
-            int indent = 0;
-            var split = str.Split(new[]{"\r\n"},StringSplitOptions.None);
-            bool removeEmpty = false;
-            for (int i = 0; i < split.Length; i++)
-                split[i] = Regex.Replace(split[i], "(^[\\r\\n\\t ]*)|([\\r\\n\\t ]*$)","");
-            StringBuilder sb = new StringBuilder();
-            foreach (var node in split)
-            {
-                if (removeEmpty && string.IsNullOrEmpty(node))
-                    continue;
-                removeEmpty = false;
-                var leftMatches = Regex.Matches(node, "{");
-                var rightMatches = Regex.Matches(node, "}");
-                //延迟设置
-                if (node != "{")
-                {
-                    indent += leftMatches.Count - rightMatches.Count;
-                    removeEmpty = true;
-                }
-                var t = "";
-                for (int i = 0; i < indent; i++)
-                    t += "\t";
-                var s = t + node;
-                sb.AppendLine(s);
-                if (node == "{")
-                    indent += leftMatches.Count - rightMatches.Count;
-            }
-            return sb.ToString();
+            builder.Append(Span.Text.Substring(position, Span.End - Span.Start - position));
+            foreach (var f in flag)
+                builder.Replace(f.Key, f.Value);
+            return builder.ToString();
         }
-
-        private static int Space(int indent, StringBuilder sb, int i, int index)
-        {
-            for (int j = 0; j < indent; j++)
-                sb.Insert(i + 1 + index++, '\t');
-            return index;
-        }
-    }
-
-    public class Serializer
-    {
-        private Generate mGenerate;
-
-        internal Serializer(Generate g)
-        {
-            mGenerate = g;
-        }
-
-        /// <summary>
-        /// 替换关键字
-        /// </summary>
-        /// <param name="key">关键字</param>
-        /// <param name="value">替换内容</param>
-        public Serializer SetReplace(string key, string value)
-        {
-            var place = mGenerate.CurrentPlace.Peek();
-            if (place.PreContent == null)
-                place.PreContent = place.Content;
-            place.PreContent = place.PreContent.Replace("{@" + key + "}", value);
-            return this;
-        }
-
-        /// <summary>
-        /// 应用
-        /// 结束写入并把内容写入到文本内
-        /// </summary>
-        public Serializer Apply()
-        {
-            var place = mGenerate.CurrentPlace.Peek();
-            //Apply的时候清除所有的替换符,此时替换符已经无法再被重写
-            for (int i = 0; i < place.Matches.Count; i++)
-                place.PreContent = place.PreContent.Replace(place.Matches[i].AllContent, "");
-            //写入字符串
-            place.StringBuilder.AppendLine(place.PreContent);
-            place.PreContent = null;
-            return this;
-        }
-
-        /// <summary>
-        /// 开始一个循环
-        /// </summary>
-        /// <param name="groupName">循环的关键Key[xxxxx]</param>
-        public bool BeginGroup(string groupName)
-        {
-            var match = mGenerate.CurrentPlace.Peek().FilterMatches(groupName);
-            if (match == null)
-                return false;
-            mGenerate.CurrentPlace.Push(match);
-            return true;
-        }
-
-        /// <summary>
-        /// 结束最后一个循环
-        /// </summary>
-        public Serializer EndGroup()
-        {
-            var place = mGenerate.CurrentPlace.Pop();
-            var upperPlace = mGenerate.CurrentPlace.Peek();
-            upperPlace.PreContent = upperPlace.PreContent.Replace(place.AllContent, place.StringBuilder.ToString());
-            return this;
-        }
-
-        /// <summary>
-        /// 直接写入
-        /// </summary>
-        /// <returns></returns>
-        public Serializer DirectWrite(string str)
-        {
-            var place = mGenerate.CurrentPlace.Peek();
-            place.StringBuilder.AppendLine(str);
-            return this;
-        }
-    }
+    } 
 }
